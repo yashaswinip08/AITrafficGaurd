@@ -1,0 +1,8 @@
+server.py
+requirements*.txt
+src/
+dashboard/
+tests/
+config/
+data/
+yolov8n.pt

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { normalizePlateText } from './plateText.js'
 import './App.css'
-
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
 
 const incidents = [
   {
@@ -98,12 +97,12 @@ function App() {
 
   const handleFileSelection = (file) => {
     if (!file) return
-    if (!file.type.startsWith('image/')) {
-      setScanMessage('Choose a JPG, PNG, or other supported image file.')
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setScanMessage('Choose a JPG, PNG, or WEBP image.')
       return
     }
-    if (file.size > 4 * 1024 * 1024) {
-      setScanMessage('Image is larger than 4 MB. Choose a smaller file.')
+    if (file.size > 15 * 1024 * 1024) {
+      setScanMessage('Image is larger than 15 MB. Choose a smaller file.')
       return
     }
 
@@ -112,7 +111,7 @@ function App() {
     setPreviewUrl(previewUrlRef.current)
     setSelectedFile(file)
     setScanResult(null)
-    setScanMessage('Image ready for vehicle and plate analysis.')
+    setScanMessage('Image ready. OCR will run locally in your browser.')
   }
 
   const handleAnalyze = async () => {
@@ -126,37 +125,46 @@ function App() {
     setScanMessage('')
     setScanResult(null)
 
-    const formData = new FormData()
-    formData.append('file', selectedFile)
-    formData.append('violation_type', scanViolationType)
-    if (plateHint.trim()) {
-      formData.append('plate_hint', plateHint.trim())
-    }
-
     try {
-      const response = await fetch(`${API_BASE_URL}/api/analyze`, {
-        method: 'POST',
-        body: formData,
+      setScanMessage('Loading the bundled OCR engine…')
+      const { analyzeImage } = await import('./ocr.js')
+      const result = await analyzeImage(selectedFile, ({ status, progress }) => {
+        const percentage = Number.isFinite(progress) ? ` ${Math.round(progress * 100)}%` : ''
+        setScanMessage(`${status}${percentage}`)
       })
 
-      if (!response.ok) {
-        throw new Error('Scan failed')
-      }
+      const manualReading = normalizePlateText(plateHint)
+      const plateReading = manualReading.validFormat ? manualReading : result.plateReading
+      const confidence = manualReading.validFormat
+        ? 100
+        : Math.round(plateReading?.confidence ?? result.confidence)
+      const hasPlate = Boolean(plateReading?.validFormat)
+      const validPlate = manualReading.validFormat || (hasPlate && confidence >= 50)
+      const plate = hasPlate ? plateReading.cleanedText : 'UNKNOWN'
+      const reviewLabel = typeMeta[scanViolationType].label.toLowerCase()
+      const analysis = manualReading.validFormat
+        ? `Plate ${plate} was entered as a manual correction. The selected category is ${reviewLabel}; this image-only tool does not confirm the violation or classify the vehicle.`
+        : validPlate
+        ? `OCR read plate ${plate} with ${confidence}% confidence. The selected category is ${reviewLabel}; this image-only tool does not confirm the violation or classify the vehicle.`
+        : hasPlate
+          ? `OCR suggests plate ${plate}, but confidence is only ${confidence}%. Verify the text or enter a correction. The selected category is ${reviewLabel}; this tool does not confirm violations.`
+        : `OCR did not find a confidently formatted registration plate. The selected category is ${reviewLabel}; this image-only tool does not confirm the violation or classify the vehicle.`
 
-      const payload = await response.json()
-      if (payload.status === 'error') {
-        throw new Error(payload.message || 'The image could not be analyzed.')
-      }
-      setScanResult(payload)
-      if (payload.wheel_category === 'unavailable') {
-        setScanMessage('Plate analysis returned. Vehicle classification is unavailable in the current backend.')
-      } else if (payload.status === 'ready') {
-        setScanMessage('Image analysis complete. Review the plate and context before enforcement.')
-      } else {
-        setScanMessage('Analysis complete; the plate needs manual review.')
-      }
-    } catch {
-      setScanMessage('Could not reach the analysis service. Check the backend deployment, then retry.')
+      setScanResult({
+        status: validPlate ? 'ready' : 'review_needed',
+        violation_type: scanViolationType,
+        plate,
+        confidence,
+        confidence_label: manualReading.validFormat ? 'Manual correction' : 'OCR confidence',
+        valid_plate_format: validPlate,
+        ai_analysis: analysis,
+        ocr_text: result.text,
+        recommendation: 'Compare this still image with contextual footage before recording an enforcement action.',
+      })
+      setScanMessage(validPlate ? 'OCR complete. Review the plate before using it.' : 'OCR complete. Manual review is required.')
+    } catch (error) {
+      console.error('Browser OCR failed:', error)
+      setScanMessage('OCR could not start. Reload the app and try again.')
     } finally {
       setIsAnalyzing(false)
     }
@@ -272,7 +280,7 @@ function App() {
         </div>
 
         <div className="panel-block toggle-row">
-          <span>Live monitoring</span>
+          <span>Demo monitoring</span>
           <button
             type="button"
             className={`toggle ${liveMode ? 'on' : ''}`}
@@ -285,18 +293,9 @@ function App() {
 
         <div className="panel-block system-box">
           <p className="muted-label">System health</p>
-          <div className="status-line">
-            <span className="dot green" />
-            Deployment online
-          </div>
-          <div className="status-line">
-            <span className="dot amber" />
-            Evidence sync ready
-          </div>
-          <div className="status-line">
-            <span className="dot blue" />
-            CPU fallback active
-          </div>
+          <div className="status-line"><span className="dot green" />OCR runs in this browser</div>
+          <div className="status-line"><span className="dot amber" />English model bundled</div>
+          <div className="status-line"><span className="dot blue" />Images stay on device</div>
         </div>
 
       </aside>
@@ -333,7 +332,7 @@ function App() {
               {label}
             </button>
           ))}
-          <span className="workspace-context">{filteredIncidents.length} records in current view</span>
+          <span className="workspace-context">{filteredIncidents.length} demo records in current view</span>
         </nav>
 
         {activeView === 'overview' && (
@@ -357,7 +356,7 @@ function App() {
           <article className="stat-card primary">
             <span>Avg confidence</span>
             <strong>{stats.avgConfidence}%</strong>
-            <small>Recognition accuracy</small>
+            <small>Average sample confidence</small>
           </article>
         </section>
 
@@ -365,7 +364,7 @@ function App() {
           <div className="panel large-panel">
             <div className="panel-header">
               <h3>Evidence stream</h3>
-              <span className="panel-pill">{liveMode ? 'Live' : 'Review'}</span>
+              <span className="panel-pill">{liveMode ? 'Sample' : 'Review'}</span>
             </div>
 
             <div className="hero-traffic">
@@ -387,7 +386,7 @@ function App() {
           <div className="panel">
             <div className="panel-header">
               <h3>Latest alerts</h3>
-              <span className="panel-pill neutral">{filteredIncidents.length} active</span>
+              <span className="panel-pill neutral">{filteredIncidents.length} demo alerts</span>
             </div>
             <div className="alert-list">
               {filteredIncidents.slice(0, 4).map((item) => (
@@ -431,7 +430,7 @@ function App() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp"
                   className="visually-hidden"
                   onChange={(event) => {
                     handleFileSelection(event.target.files?.[0])
@@ -441,7 +440,7 @@ function App() {
                 <input
                   ref={cameraInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp"
                   capture="environment"
                   className="visually-hidden"
                   onChange={(event) => {
@@ -508,9 +507,9 @@ function App() {
               </div>
 
               <div className="scan-submit-row">
-                <p className="scan-message" role="status">{scanMessage || 'AI will classify the vehicle and read the plate. A reviewer confirms violations.'}</p>
+                <p className="scan-message" role="status">{scanMessage || 'Plate OCR runs in your browser. Vehicle class and violation need a separate human review.'}</p>
                 <button type="button" className="action-button primary scan-submit" onClick={handleAnalyze} disabled={isAnalyzing || !selectedFile}>
-                  {isAnalyzing ? 'Analyzing image…' : 'Run AI analysis'}
+                  {isAnalyzing ? 'Reading image…' : 'Read plate'}
                 </button>
               </div>
             </div>
@@ -532,27 +531,22 @@ function App() {
                   <div className="result-plate">
                     <span>Number plate</span>
                     <strong>{scanResult.plate}</strong>
-                    <small>OCR confidence · {scanResult.confidence}%</small>
+                    <small>{scanResult.confidence_label} · {scanResult.confidence}%</small>
                   </div>
                   <div className="result-metrics">
-                    <div><span>Vehicle</span><strong>{scanResult.wheel_category ?? 'unclassified'}</strong></div>
-                    <div><span>Model class</span><strong>{scanResult.vehicle_class ?? 'unknown'}</strong></div>
-                    <div><span>Detection confidence</span><strong>{scanResult.vehicle_confidence ?? 0}%</strong></div>
+                    <div><span>Vehicle class</span><strong>Not analyzed</strong></div>
+                    <div><span>Violation</span><strong>Needs review</strong></div>
                     <div><span>Selected review</span><strong>{typeMeta[scanResult.violation_type]?.label ?? scanResult.violation_type}</strong></div>
                   </div>
                   <div className="ai-summary">
                     <span>AI analysis</span>
                     <p>{scanResult.ai_analysis ?? scanResult.reason}</p>
                   </div>
-                  {scanResult.wheel_category === '6+ wheels (estimated)' && (
-                    <p className="classification-note">Heavy category is inferred from a bus/truck detection; the model does not count exact wheels.</p>
-                  )}
-                  {scanResult.wheel_category === 'unavailable' && (
-                    <p className="classification-note">Vehicle classifier unavailable. Check the YOLO package and model weights in the local backend.</p>
-                  )}
-                  {scanResult.wheel_category === 'unclassified' && (
-                    <p className="classification-note">No supported vehicle class was detected. Try a clearer image showing the full vehicle.</p>
-                  )}
+                  <div className="ai-summary">
+                    <span>Recognized text</span>
+                    <p>{scanResult.ocr_text || 'No text detected.'}</p>
+                  </div>
+                  <p className="classification-note">This single-app deployment reads plate text only. It does not classify vehicles or determine violations.</p>
                   <div className="review-note">
                     <span aria-hidden="true">i</span>
                     <p>{scanResult.recommendation}</p>
@@ -562,7 +556,7 @@ function App() {
                 <div className="empty-report">
                   <span className="report-mark" aria-hidden="true">AI</span>
                   <strong>Analysis appears here</strong>
-                  <p>Upload a photo to see OCR plate text, vehicle class, model confidence, and review guidance.</p>
+                  <p>Upload a photo to see locally recognized plate text and review guidance. Your image is not sent to a server.</p>
                   <div className="pipeline-steps">
                     <span><b>01</b> Vehicle detection</span>
                     <span><b>02</b> Plate OCR</span>
