@@ -102,8 +102,8 @@ function App() {
       setScanMessage('Choose a JPG, PNG, or other supported image file.')
       return
     }
-    if (file.size > 15 * 1024 * 1024) {
-      setScanMessage('Image is larger than 15 MB. Choose a smaller file.')
+    if (file.size > 4 * 1024 * 1024) {
+      setScanMessage('Image is larger than 4 MB. Choose a smaller file.')
       return
     }
 
@@ -156,7 +156,7 @@ function App() {
         setScanMessage('Analysis complete; the plate needs manual review.')
       }
     } catch {
-      setScanMessage('Could not reach the local analysis service. Check that the Python API is running, then retry.')
+      setScanMessage('Could not reach the analysis service. Check the backend deployment, then retry.')
     } finally {
       setIsAnalyzing(false)
     }

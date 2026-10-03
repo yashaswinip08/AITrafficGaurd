@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import FastAPI, File, Form, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
@@ -22,6 +22,7 @@ app.add_middleware(
 )
 
 frontend_directory = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+max_upload_bytes = 4 * 1024 * 1024
 frontend_mount = getattr(app, "frontend", None)
 if callable(frontend_mount):
     frontend_mount("/", directory=str(frontend_directory))
@@ -43,7 +44,9 @@ async def analyze(
     if file is None:
         return {"status": "error", "message": "No image uploaded for analysis."}
 
-    image_bytes = await file.read()
+    image_bytes = await file.read(max_upload_bytes + 1)
+    if len(image_bytes) > max_upload_bytes:
+        raise HTTPException(status_code=413, detail="Image must be 4 MB or smaller.")
     return await run_in_threadpool(
         analyze_vehicle_input,
         image_bytes,
