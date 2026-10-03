@@ -6,6 +6,7 @@ from typing import Annotated, Any
 
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.concurrency import run_in_threadpool
 
 from .analysis import analyze_vehicle_input
 
@@ -34,8 +35,12 @@ async def analyze(
         return {"status": "error", "message": "No image uploaded for analysis."}
 
     image_bytes = await file.read()
-    result = analyze_vehicle_input(image_bytes, violation_type=violation_type, plate_hint=plate_hint)
-    return result
+    return await run_in_threadpool(
+        analyze_vehicle_input,
+        image_bytes,
+        violation_type,
+        plate_hint=plate_hint,
+    )
 
 
 if __name__ == "__main__":

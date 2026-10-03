@@ -6,18 +6,8 @@ import re
 from dataclasses import dataclass
 
 
-CONFUSION_MAP = {
-    'O': '0',
-    'o': '0',
-    'I': '1',
-    'i': '1',
-    'S': '5',
-    's': '5',
-    'Z': '2',
-    'z': '2',
-    'G': '6',
-    'g': '6',
-}
+OCR_LETTER_CORRECTIONS = {'0': 'O', '1': 'I', '2': 'Z', '5': 'S', '6': 'G', '8': 'B'}
+OCR_DIGIT_CORRECTIONS = {'O': '0', 'I': '1', 'S': '5', 'Z': '2', 'G': '6', 'B': '8'}
 
 
 @dataclass
@@ -33,16 +23,11 @@ def normalize_plate_text(raw_text: str, confidence: float = 0.0) -> PlateReading
     if raw_text is None:
         raw_text = ""
 
-    stripped = raw_text.strip()
-    cleaned = re.sub(r"[^A-Za-z0-9]", "", stripped.upper())
-    for source, target in CONFUSION_MAP.items():
-        cleaned = cleaned.replace(source, target)
-
-    # Prefer common Indian plate structure: state code + numeric + alpha + numeric
-    cleaned = cleaned.replace(" ", "")
-    cleaned = cleaned.replace("-", "")
-    cleaned = cleaned.replace(".", "")
-    cleaned = cleaned.replace("_", "")
+    cleaned = re.sub(r"[^A-Za-z0-9]", "", raw_text.upper())
+    if cleaned in {"UNKNOWN", "UNKN0WN"}:
+        cleaned = "UNKNOWN"
+    else:
+        cleaned = _correct_ocr_confusions(cleaned)
 
     valid = _looks_like_indian_plate(cleaned)
     return PlateReading(
@@ -55,15 +40,32 @@ def normalize_plate_text(raw_text: str, confidence: float = 0.0) -> PlateReading
 
 def _looks_like_indian_plate(value: str) -> bool:
     value = value.strip().upper()
-    if len(value) < 8 or len(value) > 12:
-        return False
+    return 8 <= len(value) <= 12 and bool(re.fullmatch(r"[A-Z]{2}\d{1,2}[A-Z]{1,3}\d{1,4}", value))
 
-    if not value[:2].isalpha():
-        return False
-    if not value[2:4].isdigit():
-        return False
 
-    if len(value) >= 10:
-        return value[4:6].isalpha() and value[6:].isdigit() and len(value[6:]) >= 4
+def _correct_ocr_confusions(value: str) -> str:
+    if _looks_like_indian_plate(value):
+        return value
 
-    return any(ch.isalpha() for ch in value[4:]) and any(ch.isdigit() for ch in value[4:])
+    for rto_length in (2, 1):
+        for series_length in (2, 1, 3):
+            for number_length in (4, 3, 2, 1):
+                if len(value) != 2 + rto_length + series_length + number_length:
+                    continue
+
+                state_end = 2
+                rto_end = state_end + rto_length
+                series_end = rto_end + series_length
+                state = _convert_characters(value[:state_end], OCR_LETTER_CORRECTIONS)
+                rto = _convert_characters(value[state_end:rto_end], OCR_DIGIT_CORRECTIONS)
+                series = _convert_characters(value[rto_end:series_end], OCR_LETTER_CORRECTIONS)
+                number = _convert_characters(value[series_end:], OCR_DIGIT_CORRECTIONS)
+                candidate = state + rto + series + number
+                if _looks_like_indian_plate(candidate):
+                    return candidate
+
+    return value
+
+
+def _convert_characters(value: str, corrections: dict[str, str]) -> str:
+    return "".join(corrections.get(character, character) for character in value)

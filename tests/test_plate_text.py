@@ -25,3 +25,15 @@ def test_ocr_confusion_values():
 def test_invalid_plate_rejected():
     reading = normalize_plate_text('HELLO123', confidence=0.2)
     assert reading.valid_format is False
+
+
+def test_unknown_sentinel_is_not_corrupted_by_ocr_confusion_map():
+    reading = normalize_plate_text('UNKNOWN')
+    assert reading.cleaned_text == 'UNKNOWN'
+    assert reading.valid_format is False
+
+
+def test_letter_o_is_preserved_in_alphabetic_plate_segment():
+    reading = normalize_plate_text('KA01AO1234')
+    assert reading.cleaned_text == 'KA01AO1234'
+    assert reading.valid_format is True

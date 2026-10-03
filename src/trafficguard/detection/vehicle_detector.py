@@ -50,7 +50,7 @@ class VehicleDetector:
                 conf = float(box.conf[0])
                 names = self.model.names if hasattr(self.model, "names") else {}
                 class_name = names.get(cls_id, str(cls_id))
-                if class_name in {"person", "car", "motorcycle", "bus", "truck", "traffic light"}:
+                if class_name in {"person", "bicycle", "car", "motorcycle", "bus", "truck", "traffic light"}:
                     detections.append(
                         Detection(
                             class_id=cls_id,
