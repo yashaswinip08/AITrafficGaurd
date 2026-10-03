@@ -1,0 +1,46 @@
+camera:
+  id: demo_cam
+  source: data/samples/demo.mp4
+
+detection:
+  model: yolov8n.pt
+  conf_threshold: 0.25
+  iou_threshold: 0.45
+  frame_skip: 1
+  resize: 640
+  device: auto
+
+plate:
+  detector_model: null
+  ocr_threshold: 0.5
+  plate_validation: true
+
+traffic_light:
+  roi:
+    x1: 120
+    y1: 20
+    x2: 220
+    y2: 150
+
+stop_line:
+  points:
+    - [80, 360]
+    - [840, 360]
+
+lanes: []
+
+alerts:
+  console: true
+  dashboard: true
+  telegram: false
+  email: false
+
+storage:
+  database_path: data/trafficguard.db
+  evidence_dir: data/outputs
+  plate_dir: data/outputs/plates
+
+rules:
+  deduplication_seconds: 60
+  signal_confidence_threshold: 0.75
+  min_plate_confidence: 0.5

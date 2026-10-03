@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+.venv
+.pytest_cache/
+*.sqlite3
+*.db
+*.mp4
+*.avi
+*.mov
+*.jpg
+*.png
+*.wav
+.DS_Store
