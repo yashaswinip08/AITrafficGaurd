@@ -1,8 +1,9 @@
 # Vercel Deployment
 
-Vercel deploys this project as one static JavaScript application. The React frontend runs OCR in the browser using worker, WebAssembly, and English language assets copied into the build. No Python function, API server, environment variable, or external OCR service is required.
+The root `vercel.json` deploys two services on one project and domain: the FastAPI app receives `/api/*`, and the Vite frontend receives all other paths. The frontend's plate OCR runs in the browser with its worker and English model bundled into the frontend build.
 
-1. Import the repository into Vercel and keep the project root set to `.`.
-2. Deploy with the checked-in Vercel configuration. It installs the frontend lockfile, builds Vite, and serves `frontend/dist` as a static site.
+Import the repository into Vercel with the project root set to `.`. The `app` service uses the root `requirements.txt`; the `frontend` service installs `frontend/package-lock.json`. Both services are public through the top-level rewrites. Neither service currently calls the other server-side, so no service binding is needed.
 
-For local development, run `npm --prefix frontend run dev`. Plate OCR runs locally in the browser; the existing Python pipeline is not part of the Vercel deployment. Image analysis accepts JPG, PNG, and WEBP files up to 15 MB.
+For local testing of both services and their routing, use `vercel dev -L` with a current Vercel CLI. The `vite.config.js` no longer points at a hardcoded local API host.
+
+The API includes PyTorch, EasyOCR, OpenCV, and Ultralytics. New Vercel projects enable Large Functions by default; for an existing project, set `VERCEL_SUPPORT_LARGE_FUNCTIONS=1` in the Production and Preview environments before deploying.

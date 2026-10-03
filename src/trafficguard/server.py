@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 from .analysis import analyze_vehicle_input
@@ -21,14 +19,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-frontend_directory = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 max_upload_bytes = 4 * 1024 * 1024
-frontend_mount = getattr(app, "frontend", None)
-if callable(frontend_mount):
-    frontend_mount("/", directory=str(frontend_directory))
-elif frontend_directory.is_dir():
-    app.mount("/", StaticFiles(directory=str(frontend_directory), html=True), name="frontend")
-
 
 @app.get("/api/health")
 def health() -> dict[str, str]:

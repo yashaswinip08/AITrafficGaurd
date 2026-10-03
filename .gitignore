@@ -4,6 +4,7 @@ __pycache__/
 .env
 .venv
 .pytest_cache/
+.vercel/
 *.sqlite3
 *.db
 *.mp4
