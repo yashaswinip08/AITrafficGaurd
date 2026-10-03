@@ -1,6 +1,6 @@
 # Vercel Deployment
 
-Vercel serves the React frontend and FastAPI application from this repository. `pyproject.toml` identifies the ASGI entrypoint, and `vercel.json` builds the frontend before deployment.
+Vercel serves the React frontend and FastAPI application from this repository. The root `server.py` re-exports the ASGI app for Vercel discovery; Python dependencies are read from the existing root `requirements.txt`.
 
 1. Import the GitHub repository into Vercel and keep the project root set to `.`.
 2. Use the FastAPI framework preset if Vercel does not detect it automatically.
