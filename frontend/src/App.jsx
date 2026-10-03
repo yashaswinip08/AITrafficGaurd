@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
+
 const incidents = [
   {
     id: 1,
@@ -132,7 +134,7 @@ function App() {
     }
 
     try {
-      const response = await fetch('http://localhost:8000/api/analyze', {
+      const response = await fetch(`${API_BASE_URL}/api/analyze`, {
         method: 'POST',
         body: formData,
       })
